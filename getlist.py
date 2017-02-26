@@ -5,15 +5,17 @@ import requests
 from lxml import etree
 import re
 import json
+import commands
+from urlparse import urlparse,parse_qs
+import urllib
 
 headers={'user-agent': 'Mozilla/5.0 (Windows NT 6.2; Win64; x64; rv:16.0.1) Gecko/20121011 Firefox/16.0.1'}
 
-def html_page(url,payload):
+def html_page(url,payload=None):
     r = requests.get(url,headers=headers,params=payload)
     if r.status_code != 200:
         raise "%s get page error"%url 
     return r.content
-
 
 def get_movie_list(url,payload):
     r = html_page(url,payload)
@@ -27,60 +29,75 @@ def get_movie_list(url,payload):
         mlist[mov] = mov_url
     return mlist
 
-def get_vid(url,payload):
-    r = html_page(url,payload)
-    pattern =  re.compile(r'vid"\s*:\s*"\s*([^"]+)"')
-    match = pattern.search(r)
-    if match == None:
-        raise "vid is None"
-    vid = match.group(1)
-    return vid 
+class Tencent:
+    def __init__(self,url):
+        self.url = url
+        self.vid = self.get_vid()
+        self.index = 1
+        self.url_prefix = ''
+        
+    def get_vid(self):
+        r = html_page(self.url)
+        pattern =  re.compile(r'vid"\s*:\s*"\s*([^"]+)"')
+        match = pattern.search(r)
+        if match == None:
+            raise "vid is None"
+        return match.group(1)
+    
+    def get_info(self):
+        api = 'http://vv.video.qq.com/getinfo?otype=json&appver=3%2E2%2E19%2E333&platform=11&defnpayver=1&vid='+self.vid
+        info = html_page(api)
+        video_json = json.loads(info[len('QZOutputJson='):-1])
+        self.ti = video_json['vl']['vi'][0]['ti']
+        self.lnk = video_json['vl']['vi'][0]['lnk']
+        self.idx = iter((i for i in range(1,video_json['vl']['vi'][0]['cl']['fc'] + 1)))
+        self.url_prefix = video_json['vl']['vi'][0]['ul']['ui'][0]['url']
+        self.url_prefix = urlparse(self.url_prefix)._replace(netloc='lmbsy.qq.com').geturl()  # fast
 
-def get_info(vid):
-    info_api = 'http://vv.video.qq.com/getinfo?otype=json&appver=3%2E2%2E19%2E333&platform=11&defnpayver=1&vid=' + vid
-    info=html_page(info_api,None)
-    print info
-    video_json = json.loads(info[len('QZOutputJson='):-1])
-    parts_vid = video_json['vl']['vi'][0]['vid']
-    parts_ti = video_json['vl']['vi'][0]['ti']
-    parts_prefix = video_json['vl']['vi'][0]['ul']['ui'][0]['url']
-    parts_formats = video_json['fl']['fi']
+        parts_formats = video_json['fl']['fi']
+        self.quality = ''
+        for part_format in parts_formats:
+            if part_format['name'] == 'fhd':
+                self.format_id = part_format['id']
+                self.format_sl = part_format['sl']
+                self.quality = 'fhd'
+                break
+            elif part_format['name'] == 'shd':
+                self.format_id = part_format['id']
+                self.format_sl = part_format['sl']
+                self.quality = 'shd'
 
-    best_quality = ''
-    for part_format in parts_formats:
-        if part_format['name'] == 'fhd':
-            best_quality = 'fhd'
-            break
+    def format_vurl(self):
+        return '{prefix}/{filename}?vkey={key}'.format(prefix=self.url_prefix,filename=self.filename,key=self.vkey)
 
-        if part_format['name'] == 'shd':
-            best_quality = 'shd'
+    def get_v_url(self):
+        idx= self.idx.next()
+        status,info_url=commands.getstatusoutput('python3 /home/zdx/vkey.py %s %d %s %s'%(self.vid,self.format_id,idx,self.lnk))
+        print info_url
+        self.filename = parse_qs(info_url.split('?')[1])['filename'][0]
+        r = html_page(info_url)
+        ijson = json.loads(r[len('QZOutputJson='):-1])
+        if 'key' in ijson:
+            self.vkey = ijson['key']
+        else:
+            raise StopIteration
+        return self.format_vurl() 
 
-
-    for part_format in parts_formats:
-        if not part_format['name'] == best_quality:
-            continue
-        part_format_id = part_format['id']
-        part_format_sl = part_format['sl']
-
-        part_urls= []
-        total_size = 0
-        try:
-            for part in range(1,100):
-                filename = vid + '.p' + str(part_format_id % 1000) + '.' + str(part) + '.mp4'
-                key_api = "http://vv.video.qq.com/getkey?otype=json&platform=11&format=%s&vid=%s&filename=%s" % (part_format_id, parts_vid, filename)
-                key_info = html_page(key_api,None)
-                key_json = json.loads(key_info[len('QZOutputJson='):-1])
-                vkey = key_json['key']
-                url = '%s/%s?vkey=%s' % (parts_prefix, filename, vkey)
-                part_urls.append(url)
-        except:
-            pass
-        return part_urls
-
+def getMlist(mov):
+    qq = Tencent(mov)
+    qq.get_info()
+    mlist=[]
+    try:
+        while True:
+            mlist.append(qq.get_v_url())
+    except StopIteration:
+        pass
+    return mlist
 
 
-def getMlist(url):
-    vid = get_vid(url,None)    
-    return get_info(vid)
+if __name__ == '__main__':
+    getMlist('https://v.qq.com/x/cover/arsauzhxjbnw8pk.html')
+
+   
 
 

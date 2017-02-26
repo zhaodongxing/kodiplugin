@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import xbmcplugin, xbmcgui, xbmcswift2
-from getlist import get_movie_list,get_info,getMlist
+from getlist import get_movie_list,getMlist
 import urllib
 from urlparse import parse_qs
 
@@ -15,10 +15,12 @@ if sys.argv[2] == '':
     tv = xbmcgui.ListItem('电视剧')
     cartoon = xbmcgui.ListItem('动画片')
     music  = xbmcgui.ListItem('音乐')
+    variety  = xbmcgui.ListItem('综艺')
     xbmcplugin.addDirectoryItem(handle, addonUrl+'?type=movie&offset=0', movie, True)
     xbmcplugin.addDirectoryItem(handle, addonUrl+'?type=cartoon&offset=0', cartoon, True)
     xbmcplugin.addDirectoryItem(handle, addonUrl+'?type=tv&offset=0', tv, True)
     xbmcplugin.addDirectoryItem(handle, addonUrl+'?type=music&offset=0', music, True)
+    xbmcplugin.addDirectoryItem(handle, addonUrl+'?type=variety&offset=0', variety, True)
     xbmcplugin.endOfDirectory(handle)
 else:
     query = parse_qs(urllib.sys.argv[2][1:])
