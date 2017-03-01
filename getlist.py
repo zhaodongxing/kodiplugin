@@ -8,6 +8,7 @@ import json
 import commands
 from urlparse import urlparse,parse_qs
 import urllib
+import sys
 
 headers={'user-agent': 'Mozilla/5.0 (Windows NT 6.2; Win64; x64; rv:16.0.1) Gecko/20121011 Firefox/16.0.1'}
 
@@ -28,6 +29,51 @@ def get_movie_list(url,payload):
         mov_url = pattern.search(etree.tostring(xm)).group(1)
         mlist[mov] = mov_url
     return mlist
+
+def get_children_serial(url):
+    r = html_page(url)
+    tree = etree.HTML(r)
+    xlist = tree.xpath('//div[@class="player_side_bd"]')[0]
+    xlist = xlist.xpath('//div[@id="video_scroll_wrap"]/div')
+    spans = xlist[1].xpath('./span')
+    eps =[]
+    for span in spans:
+        pattern =  re.compile(r'href="(.*)\s*.*title="(.*)">')
+        match = pattern.search(etree.tostring(span,encoding='utf8'))
+        surl='https://v.qq.com' + match.group(1)
+        title=match.group(2)
+        eps.append((title,surl))
+    return eps
+
+def get_tv_serial(url):
+    r = html_page(url)
+    tree = etree.HTML(r)
+    xlist = tree.xpath('//div[@class="player_side_bd"]')[0]
+    xlist = xlist.xpath('//div[@id="video_scroll_wrap"]/div')
+    spans = xlist[1].xpath('./span')
+    eps =[]
+    for span in spans:
+        pattern =  re.compile(r'href="(.*)\s*.*title="(.*)">')
+        match = pattern.search(etree.tostring(span,encoding='utf8'))
+        surl='https://v.qq.com' + match.group(1)
+        title=match.group(2)
+        eps.append((title,surl))
+    return eps
+
+def get_variety_serial(url):
+    r = html_page(url)
+    tree = etree.HTML(r)
+    xlist = tree.xpath('//div[@class="player_side_bd"]')[0]
+    xlist = xlist.xpath('//ul[@class="figures_list _column_list"]/li')
+    eps =[]
+    for li in xlist:
+        pattern =  re.compile(r'href="(.*)\s*.*title="(.*)"\s*class')
+        match = pattern.search(etree.tostring(li,encoding='utf8'))
+        surl='https://v.qq.com' + match.group(1)
+        title=match.group(2)
+        eps.append((title,surl))
+    return eps
+
 
 class Tencent:
     def __init__(self,url):
@@ -57,6 +103,11 @@ class Tencent:
         parts_formats = video_json['fl']['fi']
         self.quality = ''
         for part_format in parts_formats:
+            self.format_id = part_format['id']
+            self.format_sl = part_format['sl']
+            self.quality = part_format['name']
+            '''
+            print part_format['name']
             if part_format['name'] == 'fhd':
                 self.format_id = part_format['id']
                 self.format_sl = part_format['sl']
@@ -66,14 +117,14 @@ class Tencent:
                 self.format_id = part_format['id']
                 self.format_sl = part_format['sl']
                 self.quality = 'shd'
+            '''
 
     def format_vurl(self):
         return '{prefix}/{filename}?vkey={key}'.format(prefix=self.url_prefix,filename=self.filename,key=self.vkey)
 
     def get_v_url(self):
         idx= self.idx.next()
-        status,info_url=commands.getstatusoutput('python3 /home/zdx/vkey.py %s %d %s %s'%(self.vid,self.format_id,idx,self.lnk))
-        print info_url
+        status,info_url=commands.getstatusoutput('python3 %s/vkey.py %s %d %s %s'%(sys.path[0],self.vid,self.format_id,idx,self.lnk))
         self.filename = parse_qs(info_url.split('?')[1])['filename'][0]
         r = html_page(info_url)
         ijson = json.loads(r[len('QZOutputJson='):-1])
